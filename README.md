@@ -9,7 +9,7 @@ This project was developed for a demo at Google Cloud Next '26.
 The AppOptimize API offers a programmatic way to fetch detailed cost and utilization data for Google Cloud resources. Key characteristics include:
 - **Tabular Data**: Returns data in a structured, rows-and-columns format, easy to parse.
 - **Asynchronous Processing**: Report generation takes time; the API uses a 3-stage workflow: Request, Wait/Poll, and Retrieve.
-- **Auto-Deletion**: Generated reports are automatically deleted after 24 hours.
+- **Auto-Deletion**: Generated reports are automatically deleted after 90 days.
 - **Gross Costs**: Costs shown are generally gross costs before credits (like sustained use discounts).
 
 This MCP server simplifies interaction with this API by handling the polling and data extraction, making it easy for LLMs to use.
