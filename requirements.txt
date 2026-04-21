@@ -1,0 +1,10 @@
+mcp
+fastmcp
+httpx
+uvicorn
+starlette
+fastapi
+google-auth
+requests
+google-cloud-storage
+google-cloud-bigquery
