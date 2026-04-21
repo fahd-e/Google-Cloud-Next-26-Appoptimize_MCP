@@ -58,8 +58,11 @@ docker run -p 8080:8080 -e PROJECT_ID=your-project-id appoptimize-mcp
 
 The server uses the following environment variables:
 
--   `PROJECT_ID`: Your Google Cloud Project ID.
--   `REPORTS_BUCKET`: The GCS bucket to export reports to (default fallback can be configured in code).
+-   `PROJECT_ID`: Your Google Cloud Project ID. Used for both AppOptimize API and BigQuery.
+-   `REPORTS_BUCKET`: The GCS bucket to export reports to.
+
+### BigQuery Requirements
+The `create_and_export_report` tool expects a BigQuery dataset named `appoptimize_demo` to exist in the specified project, with tables named `cost_reports` and `utilization_reports` containing a `data` column (STRING or JSON) to store the report payload.
 
 ## MCP Tools Exposed
 
