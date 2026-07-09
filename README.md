@@ -1,80 +1,139 @@
 # AppOptimize MCP Server
 
-A Model Context Protocol (MCP) server for interacting with the AppOptimize API and Google BigQuery. This server allows Large Language Models (LLMs) to generate, manage, and read cost and utilization reports, as well as execute arbitrary SQL queries on BigQuery.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This project was developed for a demo at Google Cloud Next '26.
+A production-ready **Model Context Protocol (MCP)** server for interacting with the Google Cloud **AppOptimize API**, Google Cloud Storage (GCS), and **Google BigQuery**.
 
-## About AppOptimize API
+This server allows Large Language Models (LLMs) and MCP-compliant clients to generate, manage, read, and export cost & utilization reports, as well as execute arbitrary SQL queries on BigQuery.
 
-The AppOptimize API offers a programmatic way to fetch detailed cost and utilization data for Google Cloud resources. Key characteristics include:
-- **Tabular Data**: Returns data in a structured, rows-and-columns format, easy to parse.
-- **Asynchronous Processing**: Report generation takes time; the API uses a 3-stage workflow: Request, Wait/Poll, and Retrieve.
-- **Auto-Deletion**: Generated reports are automatically deleted after 90 days.
-- **Gross Costs**: Costs shown are generally gross costs before credits (like sustained use discounts).
+Developed for Google Cloud Next '26.
 
-This MCP server simplifies interaction with this API by handling the polling and data extraction, making it easy for LLMs to use.
+---
 
-## Features
+## 🏗️ Architecture & Project Structure
 
--   **Create Reports**: Create new cost and utilization reports with specific dimensions and metrics.
--   **Read Reports**: Fetch tabular data from completed reports.
--   **List Reports**: List all existing reports in a project.
--   **Export to GCS**: Export report data to a Google Cloud Storage bucket.
--   **Execute SQL**: Run SQL queries on BigQuery to analyze historical data.
--   **Combined Workflow**: Create a report, wait for completion, and export to BigQuery in one operation (`create_and_export_report`).
+The project has been refactored into a modular, testable, and high-performance Python package (`app/`):
 
-## Prerequisites
-
--   Python 3.11+
--   Google Cloud Project with AppOptimize API and BigQuery enabled.
--   Application Default Credentials (ADC) configured or service account key.
-
-## Installation
-
-```bash
-pip install -r requirements.txt
+```
+.
+├── app/
+│   ├── __init__.py         # Package metadata
+│   ├── config.py           # Centralized configuration & environment loader
+│   ├── auth.py             # Smart OAuth token caching and auto-refresh
+│   ├── main.py             # FastAPI server with lifespan HTTP connection pool
+│   ├── mcp_server.py       # MCP tool definitions and request dispatcher
+│   └── services/
+│       ├── __init__.py
+│       ├── appoptimize.py  # AppOptimize REST API client with exponential backoff
+│       ├── gcs.py          # GCS report export service
+│       └── bigquery.py     # BigQuery SQL executor & streaming table inserter
+├── tests/                  # Unit test suite (100% offline-runnable with mocks)
+│   ├── test_config.py
+│   ├── test_auth.py
+│   ├── test_appoptimize.py
+│   ├── test_gcs.py
+│   ├── test_bigquery.py
+│   └── test_mcp_server.py
+├── Dockerfile              # Optimized non-root container image with health check
+├── pyproject.toml          # Modern Python packaging configuration
+├── requirements.txt        # Runtime dependencies
+├── README.md               # Documentation
+└── main.py                 # Application entrypoint (backwards-compatible)
 ```
 
-## Running the Server
+---
 
-You can run the server directly using Python:
+## ✨ Features & Capabilities
+
+- **Modular Services**: Separate, isolated services for AppOptimize API, GCS, and BigQuery.
+- **Connection Pooling**: Reuses an `httpx.AsyncClient` across requests for low latency and high throughput.
+- **Smart OAuth Token Caching**: Caches GCP OAuth access tokens and refreshes them only when expired.
+- **Exponential Backoff Polling**: Intelligent polling with backoff for asynchronous report generation.
+- **Robust BigQuery Serialization**: Handles Datetime, Date, Decimal, Bytes, and JSON types smoothly.
+- **Dual Transport Support**: Exposes both standard MCP SSE transport (`/sse`, `/messages`) and direct REST endpoint (`/call/{tool_name}`).
+- **Built-in Health Checks**: `/health` and `/livez` endpoints for Cloud Run & Kubernetes probers.
+
+---
+
+## 🛠️ MCP Tools Exposed
+
+| Tool Name | Description | Key Arguments |
+| :--- | :--- | :--- |
+| `create_report` | Creates a new cost or utilization report (asynchronous operation). | `report_id`, `dimensions`, `metrics`, `scopes`, `filter` |
+| `get_report` | Fetches metadata for an existing report (state, creation/expiration time). | `report_id`, `project_id`, `location` |
+| `read_report` | Reads tabular row data from a completed report (with pagination support). | `report_id`, `page_size`, `page_token` |
+| `list_reports` | Lists all reports in a specified project and location. | `project_id`, `location` |
+| `delete_report` | Deletes a report by ID. | `report_id`, `project_id`, `location` |
+| `export_report_to_gcs` | Polls until a report is ready and exports its payload to a GCS bucket. | `report_id`, `file_name`, `bucket_name` |
+| `create_and_export_report` | Creates a report, waits for completion, and exports to GCS & BigQuery. | `report_id`, `dimensions`, `metrics`, `export_to_gcs`, `export_to_bigquery` |
+| `execute_sql` | Executes arbitrary SQL queries on BigQuery with custom type serialization. | `query`, `projectId` |
+
+---
+
+## ⚙️ Configuration
+
+The server reads configuration from environment variables (or falls back to Application Default Credentials):
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `PROJECT_ID` | Google Cloud Project ID. | Detected from ADC / gcloud |
+| `REPORTS_BUCKET` | Target GCS bucket for report exports. | None |
+| `BIGQUERY_DATASET` | Target BigQuery dataset for report streaming insert. | `appoptimize_demo` |
+| `PORT` | HTTP server port. | `8080` |
+| `HOST` | HTTP server binding host. | `0.0.0.0` |
+| `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). | `INFO` |
+
+---
+
+## 🚀 Running the Server
+
+### 1. Local Python
 
 ```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
 python main.py
 ```
 
-The server starts on port `8080` by default and exposes SSE endpoints for MCP communication.
+The server starts at `http://0.0.0.0:8080`.
 
-### Docker Support
+### 2. Docker
 
-You can also build and run the server as a container:
+Build and run the container locally:
 
 ```bash
 docker build -t appoptimize-mcp .
-docker run -p 8080:8080 -e PROJECT_ID=your-project-id appoptimize-mcp
+docker run -p 8080:8080 \
+  -e PROJECT_ID="your-gcp-project" \
+  -e REPORTS_BUCKET="your-gcs-bucket" \
+  appoptimize-mcp
 ```
 
-## Configuration
+### 3. Deploying to Google Cloud Run
 
-The server uses the following environment variables:
+```bash
+gcloud run deploy appoptimize-mcp \
+  --source . \
+  --region us-central1 \
+  --set-env-vars PROJECT_ID="your-gcp-project",REPORTS_BUCKET="your-gcs-bucket" \
+  --allow-unauthenticated
+```
 
--   `PROJECT_ID`: Your Google Cloud Project ID. Used for both AppOptimize API and BigQuery.
--   `REPORTS_BUCKET`: The GCS bucket to export reports to.
+---
 
-### BigQuery Requirements (Optional)
-BigQuery integration is optional. Only the `create_and_export_report` and `execute_sql` tools require it. If you wish to use these features, the server expects a BigQuery dataset named `appoptimize_demo` to exist in the specified project, with tables named `cost_reports` and `utilization_reports` containing a `data` column (STRING or JSON) to store the report payload.
+## 🧪 Running Unit Tests
 
-## MCP Tools Exposed
+Run the full, offline-compatible unit test suite:
 
--   `create_report`: Creates a new report.
--   `get_report`: Gets metadata for a report.
--   `read_report`: Reads the tabular data of a completed report.
--   `list_reports`: Lists reports in a specific project and location.
--   `delete_report`: Deletes a report.
--   `export_report_to_gcs`: Reads a report and exports it to GCS.
--   `create_and_export_report`: Creates a report, waits for it to be ready, and inserts data into BigQuery.
--   `execute_sql`: Executes a SQL query on BigQuery (supports custom handling for datetime and decimal types).
+```bash
+python3 -m unittest discover -s tests
+```
 
-## License
+---
 
-[Specify License here, e.g., Apache 2.0 or MIT]
+## 📄 License
+
+Apache License 2.0. See [LICENSE](LICENSE) for details.

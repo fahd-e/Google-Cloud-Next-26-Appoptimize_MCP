@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "appoptimize-mcp"
+version = "0.2.0"
+description = "Model Context Protocol (MCP) server for Google Cloud AppOptimize API and BigQuery"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Fahd", email = "fahdekadioin@google.com" }
+]
+dependencies = [
+    "mcp",
+    "fastmcp",
+    "httpx>=0.24.0",
+    "uvicorn>=0.20.0",
+    "starlette",
+    "fastapi>=0.95.0",
+    "google-auth",
+    "requests",
+    "google-cloud-storage",
+    "google-cloud-bigquery"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
